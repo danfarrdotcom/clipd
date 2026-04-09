@@ -35,10 +35,32 @@ class CaptureManager: NSObject, ObservableObject {
         state = .recording
     }
 
-    func stopRecording() {
+    func stopRecording() async {
         stream?.stopCapture()
         stream = nil
+        state = .encoding
+
+        let url = await encodeGIF()
         state = .idle
+    }
+
+    private func encodeGIF() async -> URL? {
+        guard !frames.isEmpty else { return nil }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("recording-\(UUID().uuidString).gif")
+
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, frames.count, nil) else { return nil }
+
+        let gifProperties = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]]
+        let frameProperties = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.1]]
+
+        CGImageDestinationSetProperties(destination, gifProperties)
+        for frame in frames {
+            CGImageDestinationAddImage(destination, frame, frameProperties as CFDictionary)
+        }
+        CGImageDestinationFinalize(destination)
+        frames.removeAll()
+        return url
     }
 }
 
