@@ -13,19 +13,28 @@ class CaptureManager: NSObject, ObservableObject {
 
     private var stream: SCStream?
     private var frames: [CGImage] = []
+    private var selectionRect: CGRect?
 
     func requestPermission() async {
         hasPermission = await SCShareableContent.current != nil
     }
 
-    func startRecording() async {
+    func startRegionSelection() {
+        RegionSelector.show { [weak self] rect in
+            Task { await self?.startRecording(with: rect) }
+        }
+    }
+
+    private func startRecording(with rect: CGRect) async {
         guard let content = try? await SCShareableContent.current else { return }
         guard let display = content.displays.first else { return }
+        selectionRect = rect
 
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let config = SCStreamConfiguration()
         config.width = Int(display.frame.width) * 2
         config.height = Int(display.frame.height) * 2
+        config.sourceRect = rect
         config.showsCursor = true
         config.minimumFrameInterval = CMTime(value: 1, timescale: 15)
 
