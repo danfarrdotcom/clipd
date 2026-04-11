@@ -5,11 +5,13 @@ class MenuBarManager: NSObject, ObservableObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var captureManager: CaptureManager
+    private var hotKeyMonitor: Any?
 
     init(captureManager: CaptureManager) {
         self.captureManager = captureManager
         super.init()
         setupMenuBar()
+        setupHotKey()
     }
 
     private func setupMenuBar() {
@@ -30,6 +32,14 @@ class MenuBarManager: NSObject, ObservableObject {
         self.popover = popover
     }
 
+    private func setupHotKey() {
+        hotKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.modifierFlags.contains([.command, .shift]),
+                  event.keyCode == 5 else { return }
+            self?.captureManager.startRegionSelection()
+        }
+    }
+
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
         if popover?.isShown == true {
             popover?.performClose(nil)
@@ -38,6 +48,12 @@ class MenuBarManager: NSObject, ObservableObject {
                 popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
                 NSApp.activate(ignoringOtherApps: true)
             }
+        }
+    }
+
+    deinit {
+        if let monitor = hotKeyMonitor {
+            NSEvent.removeMonitor(monitor)
         }
     }
 }
