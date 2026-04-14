@@ -3,6 +3,7 @@ import SwiftUI
 struct RecordingControls: View {
     @StateObject private var captureManager = CaptureManager()
     @State private var sourceURL: URL?
+    @AppStorage("fps") private var fps: Double = 15
 
     var body: some View {
         VStack(spacing: 16) {
@@ -13,7 +14,7 @@ struct RecordingControls: View {
             }
         }
         .padding()
-        .frame(width: 280, height: sourceURL != nil ? 140 : 120)
+        .frame(width: 280)
         .task {
             await captureManager.requestPermission()
         }
@@ -31,6 +32,18 @@ struct RecordingControls: View {
             } else {
                 Text("Ready to record")
                     .foregroundColor(.gray)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("FPS")
+                        .font(.caption)
+                    Spacer()
+                    Text("\(Int(fps))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Slider(value: $fps, in: 5...30, step: 5)
             }
 
             Button(action: {
