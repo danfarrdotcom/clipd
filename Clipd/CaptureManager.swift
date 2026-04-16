@@ -6,10 +6,25 @@ enum RecordingState {
     case idle, recording, encoding
 }
 
+enum RecordingSource: String, CaseIterable, Identifiable {
+    case region, window, app, display
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .region: return "Region"
+        case .window: return "Window"
+        case .app: return "Application"
+        case .display: return "Display"
+        }
+    }
+}
+
 @MainActor
 class CaptureManager: NSObject, ObservableObject {
     @Published var state: RecordingState = .idle
     @Published var hasPermission = false
+    @Published var source: RecordingSource = .region
 
     private var stream: SCStream?
     private var frames: [CGImage] = []
