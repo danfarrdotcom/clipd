@@ -4,6 +4,7 @@ struct RecordingControls: View {
     @StateObject private var captureManager = CaptureManager()
     @State private var sourceURL: URL?
     @AppStorage("fps") private var fps: Double = 15
+    @AppStorage("defaultSource") private var defaultSource: String = "region"
 
     var body: some View {
         VStack(spacing: 16) {
@@ -17,6 +18,7 @@ struct RecordingControls: View {
         .frame(width: 280)
         .task {
             await captureManager.requestPermission()
+            captureManager.source = RecordingSource(rawValue: defaultSource) ?? .region
         }
     }
 
@@ -33,6 +35,16 @@ struct RecordingControls: View {
                 Text("Ready to record")
                     .foregroundColor(.gray)
             }
+
+            Picker("Source", selection: Binding(
+                get: { captureManager.source },
+                set: { captureManager.source = $0; defaultSource = $0.rawValue }
+            )) {
+                ForEach(RecordingSource.allCases) { source in
+                    Text(source.label).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
