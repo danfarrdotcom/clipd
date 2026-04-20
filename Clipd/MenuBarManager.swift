@@ -21,13 +21,15 @@ class MenuBarManager: NSObject, ObservableObject {
             button.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Clipd")
             button.action = #selector(togglePopover)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         let popover = NSPopover()
-        popover.contentSize = NSSize(width: 300, height: 200)
+        popover.contentSize = NSSize(width: 300, height: 320)
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(
             rootView: RecordingControls()
+                .environmentObject(captureManager)
         )
         self.popover = popover
     }
@@ -41,6 +43,13 @@ class MenuBarManager: NSObject, ObservableObject {
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent!
+
+        if event.type == .rightMouseUp {
+            showContextMenu()
+            return
+        }
+
         if popover?.isShown == true {
             popover?.performClose(nil)
         } else {
@@ -49,6 +58,34 @@ class MenuBarManager: NSObject, ObservableObject {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
+    }
+
+    private func showContextMenu() {
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Record", action: #selector(startRecording), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Open Recordings Folder", action: #selector(openRecordingsFolder), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+
+        statusItem?.menu = menu
+        statusItem?.button?.performClick(nil)
+        statusItem?.menu = nil
+    }
+
+    @objc private func startRecording() {
+        captureManager.startRegionSelection()
+    }
+
+    @objc private func openRecordingsFolder() {
+        let url = FileManager.default.temporaryDirectory
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func openSettings() {
+        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
     }
 
     deinit {
