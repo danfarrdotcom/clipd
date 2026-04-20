@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("fps") private var fps: Double = 15
     @AppStorage("includeCursor") private var includeCursor: Bool = true
+    @AppStorage("defaultFormat") private var defaultFormat: String = "gif"
 
     var body: some View {
         TabView {
@@ -15,6 +16,10 @@ struct SettingsView: View {
 
     private var generalSettings: some View {
         Form {
+            Picker("Output Format", selection: $defaultFormat) {
+                Text("GIF").tag("gif")
+            }
+
             Slider(value: $fps, in: 5...30, step: 5) {
                 Text("Frame Rate: \(Int(fps)) FPS")
             }
@@ -28,9 +33,9 @@ struct SettingsView: View {
         VStack(spacing: 8) {
             Text("Clipd")
                 .font(.title)
-            Text("Version 0.1")
+            Text("Version 0.2")
                 .foregroundColor(.secondary)
-            Text("A lightweight screen recorder for macOS")
+            Text("A lightweight screen recorder for creating GIFs and videos.")
                 .foregroundColor(.secondary)
         }
         .padding()
