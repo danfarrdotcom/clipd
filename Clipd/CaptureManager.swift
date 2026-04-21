@@ -1,6 +1,7 @@
 import ScreenCaptureKit
 import SwiftUI
 import UniformTypeIdentifiers
+import AVFoundation
 
 enum RecordingState {
     case idle, recording, encoding
@@ -25,6 +26,7 @@ class CaptureManager: NSObject, ObservableObject {
     @Published var state: RecordingState = .idle
     @Published var hasPermission = false
     @Published var source: RecordingSource = .region
+    @Published var outputFormat: OutputFormat = .gif
 
     private var stream: SCStream?
     private var frames: [CGImage] = []
@@ -64,7 +66,11 @@ class CaptureManager: NSObject, ObservableObject {
         stream = nil
         state = .encoding
 
-        let url = await encodeGIF()
+        let url: URL?
+        switch outputFormat {
+        case .gif: url = await encodeGIF()
+        case .mp4: url = nil // TODO: implement MP4
+        }
         state = .idle
     }
 
