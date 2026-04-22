@@ -5,11 +5,12 @@ struct RecordingControls: View {
     @State private var sourceURL: URL?
     @AppStorage("fps") private var fps: Double = 15
     @AppStorage("defaultSource") private var defaultSource: String = "region"
+    @AppStorage("defaultFormat") private var defaultFormat: String = "gif"
 
     var body: some View {
         VStack(spacing: 16) {
             if let url = sourceURL {
-                SavePanelView(sourceURL: url) { sourceURL = nil }
+                SavePanelView(sourceURL: url, format: currentFormat) { sourceURL = nil }
             } else {
                 recordingControls
             }
@@ -19,7 +20,12 @@ struct RecordingControls: View {
         .task {
             await captureManager.requestPermission()
             captureManager.source = RecordingSource(rawValue: defaultSource) ?? .region
+            captureManager.outputFormat = OutputFormat(rawValue: defaultFormat) ?? .gif
         }
+    }
+
+    private var currentFormat: OutputFormat {
+        OutputFormat(rawValue: defaultFormat) ?? .gif
     }
 
     private var recordingControls: some View {
@@ -30,7 +36,7 @@ struct RecordingControls: View {
                     Text("Recording...")
                 }
             } else if captureManager.state == .encoding {
-                Text("Encoding GIF...")
+                Text(captureManager.outputFormat == .mp4 ? "Saving video..." : "Encoding GIF...")
             } else {
                 Text("Ready to record")
                     .foregroundColor(.gray)
@@ -42,6 +48,16 @@ struct RecordingControls: View {
             )) {
                 ForEach(RecordingSource.allCases) { source in
                     Text(source.label).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker("Format", selection: Binding(
+                get: { captureManager.outputFormat },
+                set: { captureManager.outputFormat = $0; defaultFormat = $0.rawValue }
+            )) {
+                ForEach(OutputFormat.allCases) { format in
+                    Text(format.rawValue.uppercased()).tag(format)
                 }
             }
             .pickerStyle(.segmented)
@@ -80,12 +96,13 @@ struct RecordingControls: View {
 
 struct SavePanelView: View {
     let sourceURL: URL
+    let format: OutputFormat
     let onDismiss: () -> Void
     @State private var showSavePanel = false
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("GIF Ready!")
+            Text(format == .mp4 ? "Video Ready!" : "GIF Ready!")
                 .font(.headline)
             HStack(spacing: 8) {
                 Button("Copy") {
@@ -97,16 +114,16 @@ struct SavePanelView: View {
                 Button("Open") { NSWorkspace.shared.open(sourceURL) }
             }
         }
-        .fileExporter(isPresented: $showSavePanel, document: GIFFile(url: sourceURL), contentType: .gif) { _ in }
+        .fileExporter(isPresented: $showSavePanel, document: MediaFile(url: sourceURL), contentType: format == .gif ? .gif : .mpeg4Movie) { _ in }
         .onDisappear { onDismiss() }
     }
 }
 
-struct GIFFile: FileDocument {
+struct MediaFile: FileDocument {
     var url: URL
-    static var readableContentTypes: [UTType] { [.gif] }
+    static var readableContentTypes: [UTType] { [.gif, .mpeg4Movie] }
     init(url: URL) { self.url = url }
-    init(configuration: ReadConfiguration) throws { url = URL(fileURLWithPath: "/tmp/placeholder.gif") }
+    init(configuration: ReadConfiguration) throws { url = URL(fileURLWithPath: "/tmp/placeholder") }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         try FileWrapper(contentsOf: url, options: []) ?? FileWrapper(data: Data())
     }
