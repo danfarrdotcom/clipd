@@ -66,12 +66,24 @@ class CaptureManager: NSObject, ObservableObject {
         stream = nil
         state = .encoding
 
+        configureCompositor()
         let url: URL?
         switch outputFormat {
         case .gif: url = await encodeGIF()
         case .mp4: url = nil // TODO: implement MP4
         }
         state = .idle
+    }
+
+    private func configureCompositor() {
+        let bgStyle = BackgroundStyle(rawValue: UserDefaults.standard.string(forKey: "backgroundStyle") ?? "none") ?? .none
+        let chromeType = ChromeType(rawValue: UserDefaults.standard.string(forKey: "chromeType") ?? "none") ?? .none
+        if bgStyle != .none || chromeType != .none {
+            let compositor = FrameCompositor(backgroundStyle: bgStyle, chromeType: chromeType)
+            frames = frames.compactMap { frame in
+                compositor.compose(frame: frame, originalSize: CGSize(width: frame.width, height: frame.height))
+            }
+        }
     }
 
     private func encodeGIF() async -> URL? {
