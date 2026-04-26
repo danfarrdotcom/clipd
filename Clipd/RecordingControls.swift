@@ -6,6 +6,8 @@ struct RecordingControls: View {
     @AppStorage("fps") private var fps: Double = 15
     @AppStorage("defaultSource") private var defaultSource: String = "region"
     @AppStorage("defaultFormat") private var defaultFormat: String = "gif"
+    @AppStorage("backgroundStyle") private var backgroundStyle: String = "none"
+    @AppStorage("chromeType") private var chromeType: String = "none"
 
     var body: some View {
         VStack(spacing: 16) {
@@ -28,6 +30,11 @@ struct RecordingControls: View {
         OutputFormat(rawValue: defaultFormat) ?? .gif
     }
 
+    private var hasStyleApplied: Bool {
+        UserDefaults.standard.string(forKey: "backgroundStyle") != "none" ||
+        UserDefaults.standard.string(forKey: "chromeType") != "none"
+    }
+
     private var recordingControls: some View {
         VStack(spacing: 16) {
             if captureManager.state == .recording {
@@ -38,8 +45,7 @@ struct RecordingControls: View {
             } else if captureManager.state == .encoding {
                 Text(captureManager.outputFormat == .mp4 ? "Saving video..." : "Encoding GIF...")
             } else {
-                Text("Ready to record")
-                    .foregroundColor(.gray)
+                headerStatus
             }
 
             Picker("Source", selection: Binding(
@@ -90,6 +96,17 @@ struct RecordingControls: View {
                     .foregroundColor(.white)
                     .cornerRadius(6)
             }
+        }
+    }
+
+    private var headerStatus: some View {
+        HStack(spacing: 8) {
+            if hasStyleApplied {
+                Text("✨")
+                    .font(.caption)
+            }
+            Text("Ready to record")
+                .foregroundColor(.gray)
         }
     }
 }
