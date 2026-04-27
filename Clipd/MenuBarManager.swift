@@ -1,14 +1,17 @@
 import SwiftUI
 import AppKit
+import Sparkle
 
 class MenuBarManager: NSObject, ObservableObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var captureManager: CaptureManager
     private var hotKeyMonitor: Any?
+    private let updater: SPUUpdater?
 
-    init(captureManager: CaptureManager) {
+    init(captureManager: CaptureManager, updater: SPUUpdater? = nil) {
         self.captureManager = captureManager
+        self.updater = updater
         super.init()
         setupMenuBar()
         setupHotKey()
@@ -27,6 +30,7 @@ class MenuBarManager: NSObject, ObservableObject {
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 300, height: 320)
         popover.behavior = .transient
+        popover.animates = true
         popover.contentViewController = NSHostingController(
             rootView: RecordingControls()
                 .environmentObject(captureManager)
@@ -62,8 +66,17 @@ class MenuBarManager: NSObject, ObservableObject {
 
     private func showContextMenu() {
         let menu = NSMenu()
+
         menu.addItem(NSMenuItem(title: "Record", action: #selector(startRecording), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
+
+        if let updater = updater {
+            let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+            updateItem.target = self
+            menu.addItem(updateItem)
+            menu.addItem(NSMenuItem.separator())
+        }
+
         menu.addItem(NSMenuItem(title: "Open Recordings Folder", action: #selector(openRecordingsFolder), keyEquivalent: "o"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
@@ -73,6 +86,10 @@ class MenuBarManager: NSObject, ObservableObject {
         statusItem?.menu = menu
         statusItem?.button?.performClick(nil)
         statusItem?.menu = nil
+    }
+
+    @objc private func checkForUpdates() {
+        updater?.checkForUpdates()
     }
 
     @objc private func startRecording() {
