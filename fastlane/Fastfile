@@ -1,0 +1,21 @@
+default_platform(:mac)
+
+platform :mac do
+  lane :build do
+    build_mac_app(
+      project: "Clipd.xcodeproj",
+      scheme: "Clipd",
+      export_method: "app-store"
+    )
+  end
+
+  lane :beta do
+    build
+    upload_to_testflight(skip_waiting_for_build_processing: true)
+  end
+
+  lane :release do
+    build
+    notarize(app: "build/Clipd.ipa")
+  end
+end

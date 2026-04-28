@@ -1,0 +1,4 @@
+app_identifier ENV.fetch("BUNDLE_ID", "com.danfarr.Clipd")
+apple_id ENV.fetch("APPLE_ID", "")
+team_id ENV.fetch("TEAM_ID", "")
+itc_team_id ENV.fetch("ITC_TEAM_ID", "")
