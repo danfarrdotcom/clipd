@@ -1,0 +1,18 @@
+name: TestFlight (Simple)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  upload:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: build/Clipd.ipa
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+          key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
+          key-content: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
