@@ -1,179 +1,305 @@
 import AppKit
+import CoreGraphics
+import CoreImage
+import AVFoundation
 
 enum BackgroundStyle: String, CaseIterable, Identifiable {
-    case none, solid, gradient, transparent, roundedCorners
+    case none = "None"
+    case solidColor = "Solid Color"
+    case gradient = "Gradient"
+    case transparent = "Transparent"
 
     var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .none: return "None"
-        case .solid: return "Solid Color"
-        case .gradient: return "Gradient"
-        case .transparent: return "Transparent"
-        case .roundedCorners: return "Rounded Corners"
-        }
-    }
 }
 
 enum ChromeType: String, CaseIterable, Identifiable {
-    case none, macOSWindow, iphone, macbook
+    case none = "None"
+    case macOSWindow = "macOS Window"
+    case roundedCorners = "Rounded Corners"
+    case iPhone = "iPhone Frame"
+    case macbook = "MacBook Frame"
 
     var id: String { rawValue }
-    var label: String {
+
+    var outputSize: CGSize {
         switch self {
-        case .none: return "None"
-        case .macOSWindow: return "macOS Window"
-        case .iphone: return "iPhone"
-        case .macbook: return "MacBook"
+        case .none: return CGSize(width: 0, height: 0)
+        case .macOSWindow: return CGSize(width: 1280, height: 800)
+        case .roundedCorners: return CGSize(width: 0, height: 0)
+        case .iPhone: return CGSize(width: 828, height: 1792)
+        case .macbook: return CGSize(width: 1680, height: 1050)
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .none: return "nosign"
+        case .macOSWindow: return "macwindow"
+        case .roundedCorners: return "rectangle.roundedtop"
+        case .iPhone: return "iphone"
+        case .macbook: return "laptopcomputer"
         }
     }
 }
 
 class FrameCompositor {
-    private let backgroundStyle: BackgroundStyle
-    private let chromeType: ChromeType
-    private let solidColor: NSColor
-    private let gradientStart: NSColor
-    private let gradientEnd: NSColor
-
-    init(backgroundStyle: BackgroundStyle = .none,
-         chromeType: ChromeType = .none,
-         solidColor: NSColor = .white,
-         gradientStart: NSColor = NSColor(red: 0.4, green: 0.6, blue: 1.0, alpha: 1),
-         gradientEnd: NSColor = NSColor(red: 0.8, green: 0.4, blue: 1.0, alpha: 1)) {
-        self.backgroundStyle = backgroundStyle
-        self.chromeType = chromeType
-        self.solidColor = solidColor
-        self.gradientStart = gradientStart
-        self.gradientEnd = gradientEnd
-    }
+    var backgroundStyle: BackgroundStyle = .none
+    var chromeType: ChromeType = .none
+    var solidColor: CGColor = NSColor.systemGray.cgColor ?? CGColor.gray
+    var gradientTop: CGColor = NSColor.systemGray.cgColor ?? CGColor.gray
+    var gradientBottom: CGColor = NSColor.systemGray2.cgColor ?? CGColor.lightGray
 
     func outputSize(for originalSize: CGSize) -> CGSize {
-        switch chromeType {
-        case .none, .macOSWindow, .roundedCorners: return originalSize
-        case .iphone: return CGSize(width: 828, height: 1792)
-        case .macbook: return CGSize(width: 1680, height: 1050)
+        let chromeSize = chromeType.outputSize
+        if chromeSize.width == 0 || chromeSize.height == 0 {
+            return originalSize
         }
+        return chromeSize
+    }
+
+    func contentRect(for outputSize: CGSize, originalSize: CGSize) -> CGRect {
+        let scale = min(outputSize.width / originalSize.width, outputSize.height / originalSize.height)
+        let scaledWidth = originalSize.width * scale
+        let scaledHeight = originalSize.height * scale
+        let x = (outputSize.width - scaledWidth) / 2
+        let y = (outputSize.height - scaledHeight) / 2
+        return CGRect(x: x, y: y, width: scaledWidth, height: scaledHeight)
     }
 
     func compose(frame: CGImage, originalSize: CGSize) -> CGImage? {
-        let outputSize = self.outputSize(for: originalSize)
-        let context = CGContext(data: nil,
-                                width: Int(outputSize.width),
-                                height: Int(outputSize.height),
-                                bitsPerComponent: 8,
-                                bytesPerRow: 0,
-                                space: CGColorSpaceCreateDeviceRGB(),
-                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        guard let ctx = context else { return nil }
-
-        ctx.setAllowsAntialiasing(true)
-        ctx.setShouldAntialias(true)
-
-        // Draw background
-        switch backgroundStyle {
-        case .none: break
-        case .solid:
-            solidColor.setFill()
-            ctx.fill(CGRect(origin: .zero, size: outputSize))
-        case .gradient:
-            drawGradient(in: CGRect(origin: .zero, size: outputSize), context: ctx)
-        case .transparent: break
-        case .roundedCorners:
+        if chromeType == .roundedCorners {
             return composeRoundedCorners(frame: frame, originalSize: originalSize)
         }
 
-        // Draw frame content
-        let contentRect = contentRect(for: outputSize, originalSize: originalSize)
-        ctx.draw(frame, in: contentRect)
+        let outSize = outputSize(for: originalSize)
+        guard let context = CGContext(
+            data: nil,
+            width: Int(outSize.width),
+            height: Int(outSize.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
 
-        // Draw chrome overlay
-        drawChromeOverlay(into: outputSize, originalSize: originalSize, context: ctx)
+        switch backgroundStyle {
+        case .none:
+            context.setFillColor(.white)
+            context.fill(CGRect(origin: .zero, size: outSize))
+        case .solidColor:
+            context.setFillColor(solidColor)
+            context.fill(CGRect(origin: .zero, size: outSize))
+        case .gradient:
+            drawGradient(in: CGRect(origin: .zero, size: outSize), context: context)
+        case .transparent:
+            break
+        }
 
-        return ctx.makeImage()
+        let rect = contentRect(for: outSize, originalSize: originalSize)
+        context.interpolationQuality = .high
+        context.draw(frame, in: rect)
+
+        drawChromeOverlay(into: context, outputSize: outSize, originalSize: originalSize)
+
+        return context.makeImage()
     }
 
     private func composeRoundedCorners(frame: CGImage, originalSize: CGSize) -> CGImage? {
+        let cornerRadius: CGFloat = 20
+        let shadowOffset: CGFloat = 8
         let padding: CGFloat = 20
-        let cornerRadius: CGFloat = 16
-        let size = CGSize(width: originalSize.width + padding * 2, height: originalSize.height + padding * 2)
 
-        guard let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height),
-                                  bitsPerComponent: 8, bytesPerRow: 0,
-                                  space: CGColorSpaceCreateDeviceRGB(),
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        let canvasSize = CGSize(width: originalSize.width + padding * 2, height: originalSize.height + padding * 2)
 
-        ctx.setAllowsAntialiasing(true)
-        ctx.setShouldAntialias(true)
+        guard let context = CGContext(
+            data: nil,
+            width: Int(canvasSize.width),
+            height: Int(canvasSize.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
 
-        // Shadow
-        ctx.setShadow(offset: CGSize(width: 0, height: 8), blur: 20, color: NSColor.black.withAlphaComponent(0.3).cgColor)
+        switch backgroundStyle {
+        case .solidColor:
+            context.setFillColor(solidColor)
+            context.fill(CGRect(origin: .zero, size: canvasSize))
+        case .gradient:
+            drawGradient(in: CGRect(origin: .zero, size: canvasSize), context: context)
+        case .none, .transparent:
+            break
+        }
 
-        // Background with rounded corners
-        let rect = CGRect(x: padding/2, y: padding/2, width: originalSize.width, height: originalSize.height)
+        let rect = CGRect(x: padding, y: padding, width: originalSize.width, height: originalSize.height)
         let path = CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
-        ctx.addPath(path)
-        ctx.clip()
 
-        ctx.draw(frame, in: rect)
+        context.setShadow(offset: CGSize(width: 0, height: -shadowOffset), blur: shadowOffset, color: CGColor(space: CGColorSpaceCreateDeviceRGB(), components: [0, 0, 0, 0.3])!)
 
-        // Border
-        ctx.setShadow(offset: .zero, blur: 0)
-        ctx.setStrokeColor(NSColor.systemGray.cgColor)
-        ctx.setLineWidth(1)
-        ctx.addPath(path)
-        ctx.strokePath()
+        context.addPath(path)
+        context.clip()
 
-        return ctx.makeImage()
+        context.interpolationQuality = .high
+        context.draw(frame, in: rect)
+
+        return context.makeImage()
     }
 
     private func drawGradient(in rect: CGRect, context: CGContext) {
-        let gradient = CGGradient(colorsSpace: nil, colors: [gradientStart.cgColor, gradientEnd.cgColor] as CFArray, locations: [0.0, 1.0])!
-        context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: rect.width, y: rect.height), options: [])
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let colors = [gradientTop, gradientBottom] as CFArray
+        guard let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0.0, 1.0]) else { return }
+
+        let startPoint = CGPoint(x: rect.midX, y: rect.maxY)
+        let endPoint = CGPoint(x: rect.midX, y: rect.minY)
+        context.drawLinearGradient(gradient, start: startPoint, end: endPoint, options: [])
     }
 
-    private func contentRect(for outputSize: CGSize, originalSize: CGSize) -> CGRect {
-        let scaleX = outputSize.width / originalSize.width
-        let scaleY = outputSize.height / originalSize.height
-        let scale = min(scaleX, scaleY)
-        let w = originalSize.width * scale
-        let h = originalSize.height * scale
-        return CGRect(x: (outputSize.width - w) / 2, y: (outputSize.height - h) / 2, width: w, height: h)
-    }
-
-    private func drawChromeOverlay(into outputSize: CGSize, originalSize: CGSize, context: CGContext) {
+    private func drawChromeOverlay(into context: CGContext, outputSize: CGSize, originalSize: CGSize) {
         switch chromeType {
-        case .none: break
-        case .macOSWindow: drawMacOSWindowChrome(into: outputSize, context: context)
-        case .iphone, .macbook: drawDeviceFrameOverlay(named: chromeType.rawValue, into: outputSize, context: context)
+        case .none:
+            break
+        case .roundedCorners:
+            break
+        case .macOSWindow:
+            drawMacOSWindowChrome(into: context, outputSize: outputSize)
+        case .iPhone:
+            drawDeviceFrameOverlay(named: "iphone-frame", into: context, outputSize: outputSize)
+        case .macbook:
+            drawDeviceFrameOverlay(named: "macbook-frame", into: context, outputSize: outputSize)
         }
     }
 
-    private func drawMacOSWindowChrome(into outputSize: CGSize, context: CGContext) {
-        let titleBarHeight: CGFloat = 28
-        let rect = CGRect(x: 0, y: outputSize.height - titleBarHeight, width: outputSize.width, height: titleBarHeight)
+    private func drawMacOSWindowChrome(into context: CGContext, outputSize: CGSize) {
+        let titleBarHeight: CGFloat = 38
+        let titleBarRect = CGRect(x: 0, y: 0, width: outputSize.width, height: titleBarHeight)
+        context.setFillColor(NSColor.windowBackgroundColor.cgColor ?? CGColor.gray)
+        context.fill(titleBarRect)
 
-        // Title bar
-        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
-        context.fill(rect)
-
-        // Border
-        context.setStrokeColor(NSColor.separatorColor.cgColor)
+        context.setStrokeColor(NSColor.separatorColor.cgColor ?? CGColor.gray)
         context.setLineWidth(1)
-        context.stroke(CGRect(x: 0, y: 0, width: outputSize.width, height: outputSize.height))
+        context.beginPath()
+        context.move(to: CGPoint(x: 0, y: titleBarHeight))
+        context.addLine(to: CGPoint(x: outputSize.width, y: titleBarHeight))
+        context.strokePath()
 
-        // Traffic lights
-        let colors: [NSColor] = [.systemRed, .systemYellow, .systemGreen]
+        context.setStrokeColor(NSColor.separatorColor.cgColor ?? CGColor.gray)
+        context.setLineWidth(1)
+        let borderRect = CGRect(x: 0.5, y: 0.5, width: outputSize.width - 1, height: outputSize.height - 1)
+        context.addRect(borderRect)
+        context.strokePath()
+
+        let dotRadius: CGFloat = 6
+        let dotY: CGFloat = titleBarHeight / 2
+        let dotSpacing: CGFloat = 16
+        let startX: CGFloat = 14
+
+        let colors: [CGColor] = [
+            NSColor(red: 0.96, green: 0.35, blue: 0.20, alpha: 1.0).cgColor ?? CGColor.red,
+            NSColor(red: 0.97, green: 0.72, blue: 0.15, alpha: 1.0).cgColor ?? CGColor.yellow,
+            NSColor(red: 0.19, green: 0.72, blue: 0.15, alpha: 1.0).cgColor ?? CGColor.green,
+        ]
+
         for (i, color) in colors.enumerated() {
-            let circleRect = CGRect(x: 14 + CGFloat(i) * 18, y: outputSize.height - titleBarHeight + 7, width: 12, height: 12)
-            color.setFill()
-            context.fillEllipse(in: circleRect)
+            let dotX = startX + CGFloat(i) * dotSpacing
+            let dotRect = CGRect(x: dotX - dotRadius, y: dotY - dotRadius, width: dotRadius * 2, height: dotRadius * 2)
+            context.setFillColor(color)
+            context.fillEllipse(in: dotRect)
         }
     }
 
-    private func drawDeviceFrameOverlay(named name: String, into outputSize: CGSize, context: CGContext) {
-        guard let image = NSImage(named: "\(name)-frame") else { return }
-        let rect = CGRect(origin: .zero, size: outputSize)
-        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
+    private func drawDeviceFrameOverlay(named resourceName: String, into context: CGContext, outputSize: CGSize) {
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "png", subdirectory: "Chrome"),
+              let nsImage = NSImage(contentsOf: url),
+              let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return
+        }
+        let frameRect = CGRect(origin: .zero, size: outputSize)
+        context.interpolationQuality = .high
+        context.draw(cgImage, in: frameRect)
+    }
+
+    func compose(sampleBuffer: CMSampleBuffer, originalSize: CGSize) -> CMSampleBuffer? {
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
+
+        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+        let ciContext = CIContext(options: nil)
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+
+        guard let composedImage = compose(frame: cgImage, originalSize: originalSize) else { return nil }
+
+        let outSize = outputSize(for: originalSize)
+        return createSampleBuffer(from: composedImage, size: outSize, timingInfo: sampleBuffer)
+    }
+
+    private func createSampleBuffer(from image: CGImage, size: CGSize, timingInfo: CMSampleBuffer) -> CMSampleBuffer? {
+        var pixelBuffer: CVPixelBuffer?
+        let attributes: [String: Any] = [
+            kCVPixelBufferCGImageCompatibilityKey as String: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true
+        ]
+
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            Int(size.width),
+            Int(size.height),
+            kCVPixelFormatType_32BGRA,
+            attributes as CFDictionary,
+            &pixelBuffer
+        )
+
+        guard status == kCVReturnSuccess, let buffer = pixelBuffer else { return nil }
+
+        CVPixelBufferLockBaseAddress(buffer, [])
+        let baseAddress = CVPixelBufferGetBaseAddress(buffer)!
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+
+        guard let context = CGContext(
+            data: baseAddress,
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else {
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            return nil
+        }
+
+        context.draw(image, in: CGRect(origin: .zero, size: size))
+        CVPixelBufferUnlockBaseAddress(buffer, [])
+
+        var formatDescription: CMFormatDescription?
+        CMVideoFormatDescriptionCreate(
+            allocator: kCFAllocatorDefault,
+            codecType: kCMVideoCodecType_H264,
+            width: Int32(size.width),
+            height: Int32(size.height),
+            extensionDictionary: nil,
+            formatDescriptionOut: &formatDescription
+        )
+
+        guard let format = formatDescription else { return nil }
+
+        var newSampleBuffer: CMSampleBuffer?
+        var timing = CMSampleTimingInfo(
+            duration: CMSampleBufferGetDuration(timingInfo),
+            presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(timingInfo),
+            decodeTimeStamp: CMSampleBufferGetDecodeTimeStamp(timingInfo)
+        )
+
+        CMSampleBufferCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: buffer,
+            dataReady: true,
+            makeDataReadyCallback: nil,
+            refcon: nil,
+            formatDescription: format,
+            sampleTiming: &timing,
+            sampleBufferOut: &newSampleBuffer
+        )
+
+        return newSampleBuffer
     }
 }

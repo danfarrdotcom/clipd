@@ -1,79 +1,132 @@
+import SwiftUI
 import AppKit
 import ScreenCaptureKit
-import SwiftUI
 
 struct DisplayInfo: Identifiable {
-    let id: String
-    let name: String
-    let width: Int
-    let height: Int
+    let id: UUID
     let display: SCDisplay
+    let name: String
+    let resolution: String
 }
 
 class DisplayPicker {
-    static private var window: NSWindow?
-    static private var completion: ((SCDisplay) -> Void)?
+    static var selectionCallback: ((SCDisplay) -> Void)?
+    static var overlayWindow: NSWindow?
 
+    @MainActor
     static func show(displays: [SCDisplay], completion: @escaping (SCDisplay) -> Void) {
-        self.completion = completion
-        let frame = NSScreen.main!.frame
-        let view = DisplayPickerView(displays: displays) { selectedDisplay in
-            hide()
-            completion(selectedDisplay)
+        selectionCallback = completion
+
+        guard let screen = NSScreen.main else { return }
+        let frame = screen.frame
+
+        let window = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .screenSaver
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.ignoresMouseEvents = false
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let hostingView = NSHostingView(rootView: DisplayPickerView(
+            displays: displays.map { d in
+                DisplayInfo(
+                    id: UUID(),
+                    display: d,
+                    name: "Display",
+                    resolution: "\(Int(d.frame.width)) × \(Int(d.frame.height))"
+                )
+            },
+            onDismiss: { hide() },
+            onSelect: { display in
+                selectionCallback?(display)
+                hide()
+            }
+        ))
+        window.contentView = hostingView
+        overlayWindow = window
+
+        window.alphaValue = 0
+        window.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            window.animator().alphaValue = 1
         }
-        window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
-        window?.level = .screenSaver
-        window?.isOpaque = false
-        window?.backgroundColor = NSColor.black.withAlphaComponent(0.5)
-        window?.contentView = view
-        window?.orderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     static func hide() {
-        window?.orderOut(nil)
-        window = nil
+        guard let window = overlayWindow else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            window.animator().alphaValue = 0
+        } completionHandler: {
+            window.orderOut(nil)
+            overlayWindow = nil
+        }
     }
 }
 
-struct DisplayPickerView: NSViewRepresentable {
-    let displays: [SCDisplay]
-    let onSelect: (SCDisplay) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let hosting = NSHostingController(rootView: DisplayPickerContent(displays: displays, onSelect: onSelect))
-        return hosting.view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
-struct DisplayPickerContent: View {
-    let displays: [SCDisplay]
+struct DisplayPickerView: View {
+    let displays: [DisplayInfo]
+    let onDismiss: () -> Void
     let onSelect: (SCDisplay) -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Select Display")
-                .font(.title)
-                .foregroundColor(.white)
-            ForEach(displays.indices, id: \.self) { i in
-                let d = displays[i]
-                Button(action: { onSelect(d) }) {
-                    VStack {
-                        Text("Display \(i + 1)")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        Text("\(d.width) x \(d.height)")
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                    .padding()
-                    .frame(width: 200)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(8)
+        ZStack {
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Select a display")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button("Cancel") { onDismiss() }
+                        .buttonStyle(.bordered)
+                        .tint(.gray)
                 }
-                .buttonStyle(.plain)
+                .padding()
+
+                VStack(spacing: 12) {
+                    ForEach(displays) { display in
+                        Button(action: { onSelect(display.display) }) {
+                            HStack {
+                                Image(systemName: "display")
+                                    .font(.system(size: 24))
+                                VStack(alignment: .leading) {
+                                    Text(display.name)
+                                        .font(.system(size: 14, weight: .medium))
+                                    Text(display.resolution)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding()
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .background(Color(NSColor.controlBackgroundColor))
+                        .cornerRadius(8)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom)
             }
+            .frame(width: 400)
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(12)
+            .shadow(radius: 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onKeyPress(.escape) {
+            onDismiss()
+            return .handled
         }
     }
 }

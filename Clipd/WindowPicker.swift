@@ -1,100 +1,215 @@
+import SwiftUI
 import AppKit
 import ScreenCaptureKit
-import SwiftUI
+
+struct WindowPickerItem: Identifiable {
+    let id: CGWindowID
+    let window: SCWindow
+    let appName: String
+    let thumbnail: NSImage?
+    
+    var itemName: String {
+        window.title ?? "Untitled"
+    }
+}
 
 class WindowPicker {
-    static private var window: NSWindow?
-    static private var completion: ((SCWindow) -> Void)?
+    static var selectionCallback: ((SCWindow) -> Void)?
+    static var overlayWindow: NSWindow?
 
+    @MainActor
     static func show(completion: @escaping (SCWindow) -> Void) {
-        self.completion = completion
-        let frame = NSScreen.main!.frame
-        let view = WindowPickerView(frame: frame) { selectedWindow in
-            hide()
-            completion(selectedWindow)
+        selectionCallback = completion
+
+        guard let screen = NSScreen.main else { return }
+        let frame = screen.frame
+
+        let window = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .screenSaver
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.ignoresMouseEvents = false
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let hostingView = NSHostingView(rootView: WindowPickerView(
+            onDismiss: { hide() },
+            onSelect: { window in
+                selectionCallback?(window)
+                hide()
+            }
+        ))
+        window.contentView = hostingView
+        overlayWindow = window
+
+        window.alphaValue = 0
+        window.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            window.animator().alphaValue = 1
         }
-        window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
-        window?.level = .screenSaver
-        window?.isOpaque = false
-        window?.backgroundColor = .clear
-        window?.contentView = view
-        window?.orderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     static func hide() {
-        window?.orderOut(nil)
-        window = nil
+        guard let window = overlayWindow else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            window.animator().alphaValue = 0
+        } completionHandler: {
+            window.orderOut(nil)
+            overlayWindow = nil
+        }
     }
 }
 
-struct WindowPickerItem: Identifiable {
-    let id: String
-    let window: SCWindow
-    let thumbnail: NSImage?
-    let appName: String
-    let title: String
-}
-
-struct WindowPickerView: NSViewRepresentable {
+struct WindowPickerView: View {
+    let onDismiss: () -> Void
     let onSelect: (SCWindow) -> Void
+    @State private var windows: [WindowPickerItem] = []
+    @State private var loading = true
 
-    func makeNSView(context: Context) -> NSView {
-        let view = WindowPickerInternalView(frame: NSScreen.main!.frame)
-        view.onSelect = onSelect
-        view.loadWindows()
-        return view
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+
+            if loading {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Loading windows...")
+                        .foregroundColor(.white)
+                }
+            } else if windows.isEmpty {
+                Text("No windows available")
+                    .foregroundColor(.white)
+                    .font(.headline)
+            } else {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Select a window to record")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Spacer()
+                        Button("Cancel") {
+                            onDismiss()
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.gray)
+                    }
+                    .padding()
+
+                    ScrollView {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 220), spacing: 16)], spacing: 16) {
+                            ForEach(windows) { item in
+                                WindowCard(item: item) {
+                                    onSelect(item.window)
+                                }
+                            }
+                        }
+                        .padding()
+                    }
+                }
+                .padding(.top)
+                .frame(width: 800, height: 500)
+                .background(Color(NSColor.windowBackgroundColor))
+                .cornerRadius(12)
+                .shadow(radius: 20)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            await loadWindows()
+        }
+        .onKeyPress(.escape) {
+            onDismiss()
+            return .handled
+        }
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
-class WindowPickerInternalView: NSView {
-    var onSelect: ((SCWindow) -> Void)?
-    private var windows: [WindowPickerItem] = []
-
-    func loadWindows() {
-        Task {
-            guard let content = try? await SCShareableContent.current else { return }
+    @MainActor
+    private func loadWindows() async {
+        do {
+            let content = try await SCShareableContent.current
             let systemBundleIDs = Set(["com.apple.dock", "com.apple.WindowManager", "com.apple.finder"])
-            let filtered = content.windows.filter { w in
-                w.onScreen && !systemBundleIDs.contains(w.owningApplication?.bundleIdentifier ?? "")
+
+            var items: [WindowPickerItem] = []
+            for window in content.windows {
+                guard let app = window.owningApplication,
+                      !systemBundleIDs.contains(app.bundleIdentifier),
+                      window.isOnScreen,
+                      window.frame.width > 100,
+                      window.frame.height > 100,
+                      !(window.title?.isEmpty ?? true) else { continue }
+
+                let thumbnail = window.image.flatMap { image in
+                    NSImage(cgImage: image, size: NSSize(width: window.frame.width, height: window.frame.height))
+                }
+
+                items.append(WindowPickerItem(
+                    id: window.windowID,
+                    window: window,
+                    appName: app.applicationName,
+                    thumbnail: thumbnail
+                ))
             }
-            windows = filtered.map { w in
-                let appName = w.owningApplication?.applicationName ?? "Unknown"
-                let title = w.title ?? ""
-                let thumbnail = SCScreenshotManager.createCGImage(from: w, rect: w.frame)
-                    .map { NSImage(cgImage: $0, size: CGSize(width: 200, height: 150)) }
-                return WindowPickerItem(id: "\(w.windowID)", window: w, thumbnail: thumbnail, appName: appName, title: title)
-            }
-            needsDisplay = true
+
+            windows = items.sorted { $0.appName < $1.appName }
+            loading = false
+        } catch {
+            print("Failed to load windows: \(error)")
+            loading = false
         }
     }
 }
 
 struct WindowCard: View {
     let item: WindowPickerItem
-    let action: () -> Void
+    let onTap: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Group {
-                    if let thumb = item.thumbnail {
-                        Image(nsImage: thumb)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } else {
-                        Color.gray.frame(height: 100)
-                    }
+        Button(action: onTap) {
+            VStack(spacing: 8) {
+                if let thumb = item.thumbnail {
+                    Image(nsImage: thumb)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 100)
+                        .cornerRadius(6)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 100)
+                        .overlay(
+                            Image(systemName: "macwindow")
+                                .font(.system(size: 32))
+                                .foregroundColor(.secondary)
+                        )
+                        .cornerRadius(6)
                 }
-                .cornerRadius(6)
-                .frame(width: 180, height: 120)
-                Text(item.appName)
-                    .font(.caption)
-                    .fontWeight(.medium)
+
+                VStack(spacing: 2) {
+                    Text(item.itemName)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    Text(item.appName)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
             }
+            .padding(8)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
     }
 }

@@ -1,101 +1,262 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("fps") private var fps: Double = 15
-    @AppStorage("includeCursor") private var includeCursor: Bool = true
+    @AppStorage("defaultFPS") private var defaultFPS: Double = 15.0
+    @AppStorage("optimizeGIF") private var optimizeGIF: Bool = true
+    @AppStorage("showCursor") private var showCursor: Bool = true
+    @AppStorage("autoCopy") private var autoCopy: Bool = false
+    @AppStorage("saveLocation") private var saveLocation: String = ""
     @AppStorage("defaultFormat") private var defaultFormat: String = "gif"
+    @AppStorage("defaultSource") private var defaultSource: String = "region"
     @AppStorage("backgroundStyle") private var backgroundStyle: String = "none"
     @AppStorage("chromeType") private var chromeType: String = "none"
-    @AppStorage("gradientStart") private var gradientStart: String = "#6699ff"
-    @AppStorage("gradientEnd") private var gradientEnd: String = "#cc66ff"
+    @AppStorage("solidColorRGBA") private var solidColorRGBA: String = "0.68,0.68,0.70,1.0"
+    @AppStorage("gradientTopRGBA") private var gradientTopRGBA: String = "0.68,0.68,0.70,1.0"
+    @AppStorage("gradientBottomRGBA") private var gradientBottomRGBA: String = "0.58,0.58,0.60,1.0"
 
     var body: some View {
         TabView {
             generalSettings
-                .tabItem { Label("General", systemImage: "gear") }
-            backgroundChromeSettings
-                .tabItem { Label("Style", systemImage: "paintpalette") }
+                .tabItem {
+                    Label("General", systemImage: "gear")
+                }
+
             shortcutSettings
-                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
+                .tabItem {
+                    Label("Shortcuts", systemImage: "keyboard")
+                }
+
             aboutView
-                .tabItem { Label("About", systemImage: "info.circle") }
+                .tabItem {
+                    Label("About", systemImage: "info.circle")
+                }
+
+            backgroundChromeSettings
+                .tabItem {
+                    Label("Style", systemImage: "paintpalette")
+                }
         }
+        .frame(width: 450, height: 350)
+        .padding()
     }
 
     private var generalSettings: some View {
         Form {
-            Picker("Output Format", selection: $defaultFormat) {
-                Text("GIF").tag("gif")
-                Text("MP4").tag("mp4")
+            Section("Recording") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Default FPS: \(Int(defaultFPS))")
+                        .font(.system(size: 13))
+                    Slider(value: $defaultFPS, in: 5...30, step: 1)
+                }
+
+                Toggle("Show cursor in recordings", isOn: $showCursor)
+
+                Picker("Default source", selection: $defaultSource) {
+                    ForEach(RecordingSource.allCases) { source in
+                        Label(source.label, systemImage: source.icon)
+                            .tag(source.rawValue)
+                    }
+                }
             }
-            Slider(value: $fps, in: 5...30, step: 5) {
-                Text("Frame Rate: \(Int(fps)) FPS")
+
+            Section("Output") {
+                Toggle("Auto-copy to clipboard", isOn: $autoCopy)
+
+                Picker("Default format", selection: $defaultFormat) {
+                    ForEach(OutputFormat.allCases) { format in
+                        Text(format.rawValue).tag(format.rawValue)
+                    }
+                }
+
+                HStack {
+                    Text("Save location:")
+                    Spacer()
+                    if saveLocation.isEmpty {
+                        Text("Temporary folder")
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(saveLocation)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    Button("Choose...") {
+                        chooseSaveLocation()
+                    }
+                    .controlSize(.small)
+                }
             }
-            Toggle("Include cursor in recording", isOn: $includeCursor)
+        }
+        .formStyle(.grouped)
+    }
+
+    private var shortcutSettings: some View {
+        Form {
+            Section("Global Shortcuts") {
+                HStack {
+                    Text("Quick Record")
+                    Spacer()
+                    KeyboardShortcutView(keys: ["⌘", "⇧", "4"])
+                }
+
+                HStack {
+                    Text("Stop Recording")
+                    Spacer()
+                    KeyboardShortcutView(keys: ["⌘", "⇧", "5"])
+                }
+            }
+
+            Text("Shortcuts work even when the app is not focused.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .formStyle(.grouped)
+    }
+
+    private var aboutView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "record.circle")
+                .font(.system(size: 48))
+                .foregroundColor(.accentColor)
+
+            Text("Clipd")
+                .font(.system(size: 20, weight: .bold))
+
+            Text("Version 1.0")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Text("A lightweight screen recorder for creating GIFs and videos.")
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+
+            Spacer()
         }
         .padding()
-        .frame(width: 350)
     }
 
     private var backgroundChromeSettings: some View {
         Form {
-            Picker("Background", selection: $backgroundStyle) {
-                ForEach(BackgroundStyle.allCases) { style in
-                    Text(style.label).tag(style.rawValue)
+            Section("Background") {
+                Picker("Style", selection: $backgroundStyle) {
+                    ForEach(BackgroundStyle.allCases) { style in
+                        Text(style.rawValue).tag(style.rawValue)
+                    }
+                }
+
+                if backgroundStyle == "Solid Color" {
+                    ColorPicker("Color", selection: solidColorBinding)
+                }
+
+                if backgroundStyle == "Gradient" {
+                    ColorPicker("Top color", selection: gradientTopBinding)
+                    ColorPicker("Bottom color", selection: gradientBottomBinding)
                 }
             }
-            Picker("Chrome", selection: $chromeType) {
-                ForEach(ChromeType.allCases) { type in
-                    Text(type.label).tag(type.rawValue)
+
+            Section("Chrome Overlay") {
+                Picker("Type", selection: $chromeType) {
+                    ForEach(ChromeType.allCases) { chrome in
+                        Label(chrome.rawValue, systemImage: chrome.icon)
+                            .tag(chrome.rawValue)
+                    }
+                }
+
+                if chromeType != "None" {
+                    Text("Output: \(chromeOutputDimensions)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
+
+            Section("Note") {
+                Text("Background and chrome are applied after recording stops. This may add a few seconds to processing time.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
-        .padding()
-        .frame(width: 350)
+        .formStyle(.grouped)
     }
 
-    private var shortcutSettings: some View {
-        VStack(spacing: 16) {
-            shortcutRow(label: "Start recording", keys: ["⌘", "⇧", "4"])
+    private var chromeOutputDimensions: String {
+        let chrome = ChromeType(rawValue: chromeType) ?? .none
+        let size = chrome.outputSize
+        if size.width == 0 {
+            return "Matches recording size"
         }
-        .padding()
-        .frame(width: 350)
+        return "\(Int(size.width)) × \(Int(size.height))"
     }
 
-    private func shortcutRow(label: String, keys: [String]) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            KeyboardShortcutView(keys: keys)
-        }
+    private var solidColorBinding: Binding<Color> {
+        Binding(
+            get: { rgbaToColor(solidColorRGBA) },
+            set: { solidColorRGBA = colorToRGBA($0) }
+        )
     }
 
-    private var aboutView: some View {
-        VStack(spacing: 8) {
-            Text("Clipd")
-                .font(.title)
-            Text("Version 0.3")
-                .foregroundColor(.secondary)
-            Text("A lightweight screen recorder for creating GIFs and videos.")
-                .foregroundColor(.secondary)
+    private var gradientTopBinding: Binding<Color> {
+        Binding(
+            get: { rgbaToColor(gradientTopRGBA) },
+            set: { gradientTopRGBA = colorToRGBA($0) }
+        )
+    }
+
+    private var gradientBottomBinding: Binding<Color> {
+        Binding(
+            get: { rgbaToColor(gradientBottomRGBA) },
+            set: { gradientBottomRGBA = colorToRGBA($0) }
+        )
+    }
+
+    private func rgbaToColor(_ rgba: String) -> Color {
+        let components = rgba.split(separator: ",").compactMap { Double($0) }
+        guard components.count == 4 else { return .gray }
+        return Color(
+            red: components[0],
+            green: components[1],
+            blue: components[2],
+            opacity: components[3]
+        )
+    }
+
+    private func colorToRGBA(_ color: Color) -> String {
+        let nsColor = NSColor(color)
+        let red = CGFloat(nsColor.redComponent)
+        let green = CGFloat(nsColor.greenComponent)
+        let blue = CGFloat(nsColor.blueComponent)
+        let alpha = CGFloat(nsColor.alphaComponent)
+        return "\(red),\(green),\(blue),\(alpha)"
+    }
+
+    private func chooseSaveLocation() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select"
+
+        if panel.runModal() == .OK {
+            saveLocation = panel.url?.path ?? ""
         }
-        .padding()
-        .frame(width: 350)
     }
 }
 
 struct KeyboardShortcutView: View {
     let keys: [String]
+
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(keys.indices, id: \.self) { i in
-                Text(keys[i])
-                    .font(.system(size: 11, weight: .medium))
+        HStack(spacing: 4) {
+            ForEach(keys, id: \.self) { key in
+                Text(key)
+                    .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color(.controlBackgroundColor))
+                    .padding(.vertical, 2)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
                     .cornerRadius(4)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3), lineWidth: 0.5))
             }
         }
     }

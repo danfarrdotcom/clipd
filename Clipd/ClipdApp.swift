@@ -11,17 +11,16 @@ struct ClipdApp: App {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
-    private var captureManager: CaptureManager!
-    private var menuBarManager: MenuBarManager!
+class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    var captureManager = CaptureManager()
+    var menuBarManager: MenuBarManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
-        captureManager = CaptureManager()
         menuBarManager = MenuBarManager(captureManager: captureManager)
+        NSApp.setActivationPolicy(.accessory)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        false
+        return false
     }
 }

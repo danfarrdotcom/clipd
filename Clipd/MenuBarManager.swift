@@ -31,6 +31,8 @@ class MenuBarManager: NSObject, ObservableObject {
         popover.contentSize = NSSize(width: 300, height: 320)
         popover.behavior = .transient
         popover.animates = true
+
+        // Pass updater to SwiftUI view
         popover.contentViewController = NSHostingController(
             rootView: RecordingControls()
                 .environmentObject(captureManager)
@@ -67,9 +69,10 @@ class MenuBarManager: NSObject, ObservableObject {
     private func showContextMenu() {
         let menu = NSMenu()
 
-        menu.addItem(NSMenuItem(title: "Record", action: #selector(startRecording), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Record Clip", action: #selector(startRecording), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
+        // Add Sparkle check for updates menu item
         if let updater = updater {
             let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
             updateItem.target = self
