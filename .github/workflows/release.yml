@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make build
+
+      - name: Create DMG
+        run: |
+          APP="build/Build/Products/Release/Clipd.app"
+          DMG="build/Clipd-${{ github.ref_name }}.dmg"
+
+          # Create a temporary volume with the app
+          hdiutil create -srcfolder "$APP" -volname Clipd -fs HFS+ -fsargs "-c c=64,a=16,e=16" -format UDRW -size 200m build/Clipd.dmg
+
+          # Mount and set icon
+          hdiutil attach build/Clipd.dmg -noautoopen
+          ln -s /Applications /Volumes/Clipd/Applications
+
+          # Set background and icon positioning (optional, skip if no assets)
+          # cp .github/release-bg.png /Volumes/Clipd/.background.png
+          # osascript -e 'tell application "Finder" to set position of item "Clipd.app" of disk "Clipd" to {200, 150}'
+          # osascript -e 'tell application "Finder" to set position of item "Applications" of disk "Clipd" to {450, 150}'
+
+          hdiutil detach /Volumes/Clipd
+          hdiutil convert build/Clipd.dmg -format UDZO -o "$DMG"
+          rm build/Clipd.dmg
+
+          echo "DMG=$DMG" >> $GITHUB_ENV
+
+      - name: Code Sign
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build-certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          codesign --force --deep --options runtime --sign "Developer ID Application" "build/Build/Products/Release/Clipd.app"
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$TEAM_ID" \
+            --wait
+
+      - name: Staple
+        run: xcrun stapler staple "$DMG"
+
+      - name: Generate Changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            git log $PREV_TAG..HEAD --pretty=format:"- %s" --reverse > /tmp/changelog.md
+          else
+            git log --pretty=format:"- %s" --reverse > /tmp/changelog.md
+          fi
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          cat /tmp/changelog.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.DMG }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            ## Changes
+
+            ${{ env.CHANGELOG }}
