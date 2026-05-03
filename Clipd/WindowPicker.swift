@@ -125,10 +125,17 @@ struct WindowPickerView: View {
         .task {
             await loadWindows()
         }
-        .onKeyPress(.escape) {
-            onDismiss()
-            return .handled
-        }
+        .overlay(
+            Group {
+                if #available(macOS 14.0, *) {
+                    EmptyView()
+                        .onKeyPress(.escape) {
+                            onDismiss()
+                            return .handled
+                        }
+                }
+            }
+        )
     }
 
     @MainActor
@@ -146,15 +153,11 @@ struct WindowPickerView: View {
                       window.frame.height > 100,
                       !(window.title?.isEmpty ?? true) else { continue }
 
-                let thumbnail = window.image.flatMap { image in
-                    NSImage(cgImage: image, size: NSSize(width: window.frame.width, height: window.frame.height))
-                }
-
                 items.append(WindowPickerItem(
                     id: window.windowID,
                     window: window,
                     appName: app.applicationName,
-                    thumbnail: thumbnail
+                    thumbnail: nil
                 ))
             }
 

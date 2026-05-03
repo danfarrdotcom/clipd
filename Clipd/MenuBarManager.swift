@@ -1,17 +1,15 @@
 import SwiftUI
 import AppKit
-import Sparkle
 
+@MainActor
 class MenuBarManager: NSObject, ObservableObject {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var captureManager: CaptureManager
     private var hotKeyMonitor: Any?
-    private let updater: SPUUpdater?
 
-    init(captureManager: CaptureManager, updater: SPUUpdater? = nil) {
+    init(captureManager: CaptureManager) {
         self.captureManager = captureManager
-        self.updater = updater
         super.init()
         setupMenuBar()
         setupHotKey()
@@ -32,7 +30,6 @@ class MenuBarManager: NSObject, ObservableObject {
         popover.behavior = .transient
         popover.animates = true
 
-        // Pass updater to SwiftUI view
         popover.contentViewController = NSHostingController(
             rootView: RecordingControls()
                 .environmentObject(captureManager)
@@ -44,7 +41,9 @@ class MenuBarManager: NSObject, ObservableObject {
         hotKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.modifierFlags.contains([.command, .shift]),
                   event.keyCode == 5 else { return }
-            self?.captureManager.startRegionSelection()
+            Task { @MainActor [weak self] in
+                self?.captureManager.startSelection()
+            }
         }
     }
 
@@ -71,15 +70,6 @@ class MenuBarManager: NSObject, ObservableObject {
 
         menu.addItem(NSMenuItem(title: "Record Clip", action: #selector(startRecording), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
-
-        // Add Sparkle check for updates menu item
-        if let updater = updater {
-            let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
-            updateItem.target = self
-            menu.addItem(updateItem)
-            menu.addItem(NSMenuItem.separator())
-        }
-
         menu.addItem(NSMenuItem(title: "Open Recordings Folder", action: #selector(openRecordingsFolder), keyEquivalent: "o"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
@@ -91,12 +81,10 @@ class MenuBarManager: NSObject, ObservableObject {
         statusItem?.menu = nil
     }
 
-    @objc private func checkForUpdates() {
-        updater?.checkForUpdates()
-    }
-
     @objc private func startRecording() {
-        captureManager.startRegionSelection()
+        Task { @MainActor [weak self] in
+            self?.captureManager.startSelection()
+        }
     }
 
     @objc private func openRecordingsFolder() {

@@ -45,9 +45,9 @@ enum ChromeType: String, CaseIterable, Identifiable {
 class FrameCompositor {
     var backgroundStyle: BackgroundStyle = .none
     var chromeType: ChromeType = .none
-    var solidColor: CGColor = NSColor.systemGray.cgColor ?? CGColor.gray
-    var gradientTop: CGColor = NSColor.systemGray.cgColor ?? CGColor.gray
-    var gradientBottom: CGColor = NSColor.systemGray2.cgColor ?? CGColor.lightGray
+    var solidColor: CGColor = NSColor.systemGray.cgColor
+    var gradientTop: CGColor = NSColor.systemGray.cgColor
+    var gradientBottom: CGColor = NSColor.darkGray.cgColor
 
     func outputSize(for originalSize: CGSize) -> CGSize {
         let chromeSize = chromeType.outputSize
@@ -134,7 +134,7 @@ class FrameCompositor {
         let rect = CGRect(x: padding, y: padding, width: originalSize.width, height: originalSize.height)
         let path = CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
 
-        context.setShadow(offset: CGSize(width: 0, height: -shadowOffset), blur: shadowOffset, color: CGColor(space: CGColorSpaceCreateDeviceRGB(), components: [0, 0, 0, 0.3])!)
+        context.setShadow(offset: CGSize(width: 0, height: -shadowOffset), blur: shadowOffset, color: CGColor(colorSpace: CGColorSpaceCreateDeviceRGB(), components: [0, 0, 0, 0.3])!)
 
         context.addPath(path)
         context.clip()
@@ -173,17 +173,17 @@ class FrameCompositor {
     private func drawMacOSWindowChrome(into context: CGContext, outputSize: CGSize) {
         let titleBarHeight: CGFloat = 38
         let titleBarRect = CGRect(x: 0, y: 0, width: outputSize.width, height: titleBarHeight)
-        context.setFillColor(NSColor.windowBackgroundColor.cgColor ?? CGColor.gray)
+        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
         context.fill(titleBarRect)
 
-        context.setStrokeColor(NSColor.separatorColor.cgColor ?? CGColor.gray)
+        context.setStrokeColor(NSColor.separatorColor.cgColor)
         context.setLineWidth(1)
         context.beginPath()
         context.move(to: CGPoint(x: 0, y: titleBarHeight))
         context.addLine(to: CGPoint(x: outputSize.width, y: titleBarHeight))
         context.strokePath()
 
-        context.setStrokeColor(NSColor.separatorColor.cgColor ?? CGColor.gray)
+        context.setStrokeColor(NSColor.separatorColor.cgColor)
         context.setLineWidth(1)
         let borderRect = CGRect(x: 0.5, y: 0.5, width: outputSize.width - 1, height: outputSize.height - 1)
         context.addRect(borderRect)
@@ -195,9 +195,9 @@ class FrameCompositor {
         let startX: CGFloat = 14
 
         let colors: [CGColor] = [
-            NSColor(red: 0.96, green: 0.35, blue: 0.20, alpha: 1.0).cgColor ?? CGColor.red,
-            NSColor(red: 0.97, green: 0.72, blue: 0.15, alpha: 1.0).cgColor ?? CGColor.yellow,
-            NSColor(red: 0.19, green: 0.72, blue: 0.15, alpha: 1.0).cgColor ?? CGColor.green,
+            NSColor(red: 0.96, green: 0.35, blue: 0.20, alpha: 1.0).cgColor,
+            NSColor(red: 0.97, green: 0.72, blue: 0.15, alpha: 1.0).cgColor,
+            NSColor(red: 0.19, green: 0.72, blue: 0.15, alpha: 1.0).cgColor,
         ]
 
         for (i, color) in colors.enumerated() {
@@ -276,7 +276,7 @@ class FrameCompositor {
             codecType: kCMVideoCodecType_H264,
             width: Int32(size.width),
             height: Int32(size.height),
-            extensionDictionary: nil,
+            extensions: nil,
             formatDescriptionOut: &formatDescription
         )
 

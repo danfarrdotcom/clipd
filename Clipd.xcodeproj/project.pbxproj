@@ -14,6 +14,10 @@
 		A10000000000000000000005 /* RecordingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* RecordingControls.swift */; };
 		A10000000000000000000006 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* SettingsView.swift */; };
 		A10000000000000000000007 /* FrameCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* FrameCompositor.swift */; };
+		A10000000000000000000008 /* OutputFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* OutputFormat.swift */; };
+		A10000000000000000000009 /* WindowPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* WindowPicker.swift */; };
+		A1000000000000000000000A /* DisplayPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* DisplayPicker.swift */; };
+		A1000000000000000000000B /* SparkleIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* SparkleIntegration.swift */; };
 		A10000000000000000000100 /* iphone-frame.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000110 /* iphone-frame.png */; };
 		A10000000000000000000101 /* macbook-frame.png in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000111 /* macbook-frame.png */; };
 /* End PBXBuildFile section */
@@ -27,6 +31,10 @@
 		A10000000000000000000015 /* RecordingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingControls.swift; sourceTree = "<group>"; };
 		A10000000000000000000016 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A10000000000000000000017 /* FrameCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameCompositor.swift; sourceTree = "<group>"; };
+		A10000000000000000000018 /* OutputFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputFormat.swift; sourceTree = "<group>"; };
+		A10000000000000000000019 /* WindowPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPicker.swift; sourceTree = "<group>"; };
+		A1000000000000000000001A /* DisplayPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayPicker.swift; sourceTree = "<group>"; };
+		A1000000000000000000001B /* SparkleIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleIntegration.swift; sourceTree = "<group>"; };
 		A10000000000000000000020 /* Clipd.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Clipd.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000110 /* iphone-frame.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "iphone-frame.png"; sourceTree = "<group>"; };
@@ -57,11 +65,15 @@
 			children = (
 				A10000000000000000000011 /* ClipdApp.swift */,
 				A10000000000000000000012 /* CaptureManager.swift */,
+				A10000000000000000000018 /* OutputFormat.swift */,
+				A10000000000000000000019 /* WindowPicker.swift */,
+				A1000000000000000000001A /* DisplayPicker.swift */,
 				A10000000000000000000013 /* RegionSelector.swift */,
 				A10000000000000000000014 /* MenuBarManager.swift */,
 				A10000000000000000000015 /* RecordingControls.swift */,
 				A10000000000000000000016 /* SettingsView.swift */,
 				A10000000000000000000017 /* FrameCompositor.swift */,
+				A1000000000000000000001B /* SparkleIntegration.swift */,
 				A10000000000000000000120 /* Chrome */,
 				A10000000000000000000020 /* Clipd.entitlements */,
 				A10000000000000000000021 /* Info.plist */,
@@ -158,11 +170,15 @@
 			files = (
 				A10000000000000000000001 /* ClipdApp.swift in Sources */,
 				A10000000000000000000002 /* CaptureManager.swift in Sources */,
+				A10000000000000000000008 /* OutputFormat.swift in Sources */,
+				A10000000000000000000009 /* WindowPicker.swift in Sources */,
+				A1000000000000000000000A /* DisplayPicker.swift in Sources */,
 				A10000000000000000000003 /* RegionSelector.swift in Sources */,
 				A10000000000000000000004 /* MenuBarManager.swift in Sources */,
 				A10000000000000000000005 /* RecordingControls.swift in Sources */,
 				A10000000000000000000006 /* SettingsView.swift in Sources */,
 				A10000000000000000000007 /* FrameCompositor.swift in Sources */,
+				A1000000000000000000000B /* SparkleIntegration.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

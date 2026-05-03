@@ -75,14 +75,18 @@ class CaptureManager: NSObject, ObservableObject {
 
     private var stream: SCStream?
     private var frames: [CGImage] = []
-    private var assetWriter: AVAssetWriter?
-    private var assetWriterInput: AVAssetWriterInput?
+    nonisolated(unsafe) private var assetWriter: AVAssetWriter?
+    nonisolated(unsafe) private var assetWriterInput: AVAssetWriterInput?
     private var captureQueue = DispatchQueue(label: "com.clipd.capture", qos: .userInitiated)
     private var startTime: Date?
 
     private var compositor = FrameCompositor()
-    private var recordedSize: CGSize?
-    private var mp4CompositionActive = false
+
+    // Thread-safe state for nonisolated SCStreamOutput delegate
+    nonisolated(unsafe) private var _streamOutputFormat: OutputFormat = .gif
+    nonisolated(unsafe) private var _streamRecordedSize: CGSize?
+    nonisolated(unsafe) private var _streamMP4CompositionActive: Bool = false
+    nonisolated(unsafe) private var _streamCompositor: FrameCompositor?
 
     var source: RecordingSource = .region
     var selectedWindowID: CGWindowID?
@@ -180,14 +184,16 @@ class CaptureManager: NSObject, ObservableObject {
             let filter = try createContentFilter(from: source, content: content, display: display)
 
             let config = SCStreamConfiguration()
-            let rect = sourceRect(from: source, display: display)
+            let rect = await sourceRect(from: source, display: display)
             config.width = max(1, min(Int(rect.width), 1920))
             config.height = max(1, min(Int(rect.height), 1200))
             config.sourceRect = rect
             config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(currentFPS))
             config.queueDepth = 5
             config.showsCursor = UserDefaults.standard.bool(forKey: "showCursor")
-            config.captureResolution = .automatic
+            if #available(macOS 14.0, *) {
+                config.captureResolution = .automatic
+            }
 
             if outputFormat == .mp4 {
                 try await setupMP4Writer()
@@ -198,7 +204,10 @@ class CaptureManager: NSObject, ObservableObject {
 
             frames.removeAll()
             frameCount = 0
-            recordedSize = nil
+            _streamOutputFormat = outputFormat
+            _streamRecordedSize = nil
+            _streamMP4CompositionActive = false
+            _streamCompositor = compositor
             startTime = Date()
 
             try await stream?.startCapture()
@@ -211,7 +220,7 @@ class CaptureManager: NSObject, ObservableObject {
     }
 
     func stopRecording() async -> URL? {
-        await stream?.stopCapture()
+        try? await stream?.stopCapture()
         stream = nil
         state = .processing
 
@@ -247,9 +256,6 @@ class CaptureManager: NSObject, ObservableObject {
             guard let scWindow = content.windows.first(where: { $0.windowID == selectedWindowID }) else {
                 throw RecordingError.windowNotFound
             }
-            if scWindow.isDesktopIndependentWindow {
-                return SCContentFilter(desktopIndependentWindow: scWindow)
-            }
             let allOtherApps = content.applications.filter { $0.bundleIdentifier != scWindow.owningApplication?.bundleIdentifier }
             return SCContentFilter(display: display, excludingApplications: allOtherApps, exceptingWindows: [])
 
@@ -264,12 +270,12 @@ class CaptureManager: NSObject, ObservableObject {
         }
     }
 
-    private func sourceRect(from source: RecordingSource, display: SCDisplay) -> CGRect {
+    private func sourceRect(from source: RecordingSource, display: SCDisplay) async -> CGRect {
         switch source {
         case .region:
             return selectedRect
         case .window:
-            guard let window = selectedSCWindow else { return display.frame }
+            guard let window = await selectedSCWindow else { return display.frame }
             return window.frame
         case .application:
             return display.frame
@@ -344,14 +350,17 @@ class CaptureManager: NSObject, ObservableObject {
             compositor.gradientBottom = rgba
         }
 
-        mp4CompositionActive = outputFormat == .mp4 && (chrome != .none || bgStyle != .none)
+        let isMP4 = outputFormat == .mp4 && (chrome != .none || bgStyle != .none)
+        _streamOutputFormat = outputFormat
+        _streamMP4CompositionActive = isMP4
+        _streamCompositor = compositor
     }
 
     private func parseRGBA(_ rgbaString: String?) -> CGColor? {
         guard let str = rgbaString else { return nil }
         let components = str.split(separator: ",").compactMap { Double($0) }
         guard components.count == 4 else { return nil }
-        return CGColor(space: CGColorSpaceCreateDeviceRGB(), components: components.map { CGFloat($0) })
+        return CGColor(colorSpace: CGColorSpaceCreateDeviceRGB(), components: components.map { CGFloat($0) })
     }
 
     private func composeAllFrames() {
@@ -449,19 +458,29 @@ extension CaptureManager: SCStreamOutput {
     nonisolated func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen else { return }
 
-        if recordedSize == nil, let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+        let localFormat = _streamOutputFormat
+        let localCompositionActive = _streamMP4CompositionActive
+        let localCompositor = _streamCompositor
+        let localRecordedSize = _streamRecordedSize
+
+        if localRecordedSize == nil, let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
             let width = CVPixelBufferGetWidth(imageBuffer)
             let height = CVPixelBufferGetHeight(imageBuffer)
+            let size = CGSize(width: width, height: height)
+            _streamRecordedSize = size
+
             Task { @MainActor in
-                self.recordedSize = CGSize(width: width, height: height)
+                self.estimatedFileSize = "Recording: \(Int(size.width))x\(Int(size.height))"
             }
+            return
         }
 
-        if outputFormat == .mp4, let assetWriterInput = self.assetWriterInput,
-           assetWriterInput.isReadyForMoreMediaData {
+        if localFormat == .mp4, let input = assetWriterInput,
+           input.isReadyForMoreMediaData {
 
             var bufferToWrite = sampleBuffer
-            if mp4CompositionActive, let size = recordedSize {
+            if localCompositionActive, let size = _streamRecordedSize,
+               let compositor = localCompositor {
                 if let composed = compositor.compose(sampleBuffer: sampleBuffer, originalSize: size) {
                     bufferToWrite = composed
                 }
@@ -474,7 +493,7 @@ extension CaptureManager: SCStreamOutput {
                     self.assetWriter?.startSession(atSourceTime: presentationTime)
                 }
             }
-            assetWriterInput.append(bufferToWrite)
+            input.append(bufferToWrite)
 
             Task { @MainActor in
                 self.frameCount += 1

@@ -11,6 +11,7 @@ struct ClipdApp: App {
     }
 }
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var captureManager = CaptureManager()
     var menuBarManager: MenuBarManager?

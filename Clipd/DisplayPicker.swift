@@ -124,9 +124,16 @@ struct DisplayPickerView: View {
             .shadow(radius: 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onKeyPress(.escape) {
-            onDismiss()
-            return .handled
-        }
+        .overlay(
+            Group {
+                if #available(macOS 14.0, *) {
+                    EmptyView()
+                        .onKeyPress(.escape) {
+                            onDismiss()
+                            return .handled
+                        }
+                }
+            }
+        )
     }
 }
