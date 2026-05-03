@@ -11,7 +11,7 @@ A lightweight, native macOS menu bar app for recording your screen as GIFs. Perf
   </a>
 </p>
 
-![Clipd screenshot](assets/Image.png)
+![Clipd screenshot](image.jpg)
 
 ## Features
 
