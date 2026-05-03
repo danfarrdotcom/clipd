@@ -16,6 +16,7 @@ struct WindowPickerItem: Identifiable {
 class WindowPicker {
     static var selectionCallback: ((SCWindow) -> Void)?
     static var overlayWindow: NSWindow?
+    static var eventMonitor: Any?
 
     @MainActor
     static func show(completion: @escaping (SCWindow) -> Void) {
@@ -46,6 +47,14 @@ class WindowPicker {
         window.contentView = hostingView
         overlayWindow = window
 
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { // Escape key
+                hide()
+                return nil
+            }
+            return event
+        }
+
         window.alphaValue = 0
         window.makeKeyAndOrderFront(nil)
         NSAnimationContext.runAnimationGroup { context in
@@ -55,6 +64,10 @@ class WindowPicker {
     }
 
     static func hide() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
         guard let window = overlayWindow else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
@@ -85,9 +98,16 @@ struct WindowPickerView: View {
                         .foregroundColor(.white)
                 }
             } else if windows.isEmpty {
-                Text("No windows available")
-                    .foregroundColor(.white)
-                    .font(.headline)
+                VStack(spacing: 16) {
+                    Text("No windows available")
+                        .foregroundColor(.white)
+                        .font(.headline)
+                    Button("Cancel") {
+                        onDismiss()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.gray)
+                }
             } else {
                 VStack(spacing: 0) {
                     HStack {
@@ -125,17 +145,6 @@ struct WindowPickerView: View {
         .task {
             await loadWindows()
         }
-        .overlay(
-            Group {
-                if #available(macOS 14.0, *) {
-                    EmptyView()
-                        .onKeyPress(.escape) {
-                            onDismiss()
-                            return .handled
-                        }
-                }
-            }
-        )
     }
 
     @MainActor

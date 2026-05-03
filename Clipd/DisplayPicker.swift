@@ -12,6 +12,7 @@ struct DisplayInfo: Identifiable {
 class DisplayPicker {
     static var selectionCallback: ((SCDisplay) -> Void)?
     static var overlayWindow: NSWindow?
+    static var eventMonitor: Any?
 
     @MainActor
     static func show(displays: [SCDisplay], completion: @escaping (SCDisplay) -> Void) {
@@ -50,6 +51,14 @@ class DisplayPicker {
         window.contentView = hostingView
         overlayWindow = window
 
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 {
+                hide()
+                return nil
+            }
+            return event
+        }
+
         window.alphaValue = 0
         window.makeKeyAndOrderFront(nil)
         NSAnimationContext.runAnimationGroup { context in
@@ -59,6 +68,10 @@ class DisplayPicker {
     }
 
     static func hide() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
         guard let window = overlayWindow else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
@@ -124,16 +137,5 @@ struct DisplayPickerView: View {
             .shadow(radius: 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(
-            Group {
-                if #available(macOS 14.0, *) {
-                    EmptyView()
-                        .onKeyPress(.escape) {
-                            onDismiss()
-                            return .handled
-                        }
-                }
-            }
-        )
     }
 }
